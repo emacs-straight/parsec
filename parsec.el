@@ -501,7 +501,8 @@
 
 ;;; Code:
 
-(require 'cl-lib)
+(eval-when-compile 
+  (require 'cl-lib))
 
 (defgroup parsec nil
   "Parser combinators for Emacs Lisp"
@@ -600,15 +601,14 @@
         (setq regex-str (concat regex-str "^"))))
     (concat regex-head regex-str regex-end)))
 
-(defun parsec-one-of (&rest chars)
+(defmacro parsec-one-of (&rest chars)
   "Succeed if the current character is in the supplied list of CHARS.
 Return the parsed character.
 
->  (parsec-one-of ?a ?e ?i ?o ?u)
-
-Note this function is just a wrapper of `parsec-re'.  For complicated use cases,
-consider using `parsec-re' instead."
-  (parsec-re (format "[%s]" (parsec-make-alternatives chars))))
+>  (parsec-one-of ?a ?e ?i ?o ?u)"
+  (let ((sexp '(parsec-or))
+	(parsers (mapcar (lambda (c) (list #'parsec-ch c)) chars)))
+    (append sexp parsers)))
 
 (defun parsec-none-of (&rest chars)
   "Succeed if the current character not in the supplied list of CHARS.
@@ -678,13 +678,16 @@ fails after consuming some input or there is no more parsers."
            (concat "None of the parsers succeeds:\n"
                    (mapconcat #'identity ,error-str-list-sym "\n"))))))))
 
-(defalias 'parsec-and 'progn
+(defmacro parsec-and (&rest body)
   "Eval BODY sequentially and return the result of the last parser.
-This combinator fails if one of the parsers fails.")
+This combinator fails if one of the parsers fails."
+  `(progn ,@body))
 
-(defalias 'parsec-return 'prog1
+(defmacro parsec-return (first &rest body)
   "Eval FIRST and BODY sequentially and return the results of the first parser.
-This combinator fails if one of the parsers fails.")
+This combinator fails if one of the parsers fails."
+  (declare (indent 1))
+  `(prog1 ,first ,@body))
 
 (defalias 'parsec-collect 'list
   "Collect the results of all the parsers OBJECTS into a list.")
@@ -897,7 +900,8 @@ Return a list of N values returned by PARSER."
   (let ((res-sym (make-symbol "results")))
     `(let (,res-sym)
        (dotimes (_ ,n ,res-sym)
-         (push ,parser ,res-sym)))))
+         (push ,parser ,res-sym))
+       (nreverse ,res-sym))))
 
 (defmacro parsec-count-as-string (n parser)
   "Parse N occurrences of PARSER.
